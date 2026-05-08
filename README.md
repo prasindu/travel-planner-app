@@ -1,97 +1,152 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Lanka Trails 🌴🇱🇰
 
-# Getting Started
+Lanka Trails is a comprehensive travel planning application built with React Native. It helps users discover, plan, and optimize their journeys across the beautiful island of Sri Lanka. With real-time weather integration, intelligent routing, and an interactive journey timeline, Lanka Trails is your ultimate travel companion.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+---
 
-## Step 1: Start Metro
+## ✨ Key Features
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+- **Interactive Trip Planning:** Create custom itineraries with multiple stops across Sri Lanka.
+- **Smart Navigation:** Built-in Google Maps integration for seamless navigation between destinations.
+- **Live Weather Updates:** Real-time weather forecasts for every stop on your journey, powered by an external weather API.
+- **Intelligent Rerouting (Weather Alerts):** If bad weather (rain, thunderstorm, etc.) is detected at a planned stop, the app automatically alerts the user and suggests nearby indoor alternatives.
+- **Journey Timeline:** A visually appealing list view to track your past, current, and upcoming destinations.
+- **Dual View Mode:** Easily switch between the Map View (for geographical context) and the List View (for timeline tracking).
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+---
 
-```sh
-# Using npm
-npm start
+## 🚀 Technologies Used
 
-# OR using Yarn
-yarn start
+| Technology | Purpose |
+|---|---|
+| React Native (CLI/Bare Workflow) | Frontend framework |
+| `lucide-react-native` | Icons |
+| `react-native-webview` | Maps via Google Maps Embed API |
+| `react-native-dotenv` | Environment variable management |
+| React Native Animated API | Animations |
+
+---
+
+## 🛠️ Setup & Installation
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) installed
+- [Java Development Kit (JDK)](https://www.oracle.com/java/technologies/downloads/) installed
+- [Android Studio](https://developer.android.com/studio) and Android SDK set up
+- A physical Android device or an Emulator
+
+### Installation Steps
+
+**1. Clone the repository:**
+
+```bash
+git clone https://github.com/YourUsername/TravelPlannerApp.git
+cd TravelPlannerApp
 ```
 
-## Step 2: Build and run your app
+**2. Install dependencies:**
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
-
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+```bash
+npm install
 ```
 
-### iOS
+**3. Set up Environment Variables:**
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+Create a `.env` file in the root directory and add your Google Maps API key:
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
-
-```sh
-bundle install
+```env
+VITE_GOOGLE_MAPS_KEY=your_google_maps_api_key_here
 ```
 
-Then, and every time you update your native dependencies, run:
+> **Note:** The API key is securely bundled during the build process using `react-native-dotenv`.
 
-```sh
-bundle exec pod install
+**4. Run the application (Android):**
+
+```bash
+npx react-native run-android
 ```
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+If you face any caching issues, start the Metro server with a reset cache flag:
 
-```sh
-# Using npm
-npm run ios
-
-# OR using Yarn
-yarn ios
+```bash
+npx react-native start --reset-cache
 ```
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+---
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+## 📦 Building the APK (Release Version)
 
-## Step 3: Modify your app
+To generate a standalone APK that can be installed on any Android device:
 
-Now that you have successfully run the app, let's make changes!
+**1. Navigate to the `android` directory:**
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+```bash
+cd android
+```
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+**2. Clean the build cache (recommended):**
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+```bash
+gradlew clean
+```
 
-## Congratulations! :tada:
+**3. Build the release APK:**
 
-You've successfully run and modified your React Native App. :partying_face:
+```bash
+gradlew assembleRelease
+```
 
-### Now what?
+**4. The generated APK will be located at:**
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
+```
+android/app/build/outputs/apk/release/app-release.apk
+```
 
-# Troubleshooting
+---
 
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
+## 💡 Usage
 
-# Learn More
+Lanka Trails guides you through your journey in a smart, step-by-step flow:
 
-To learn more about React Native, take a look at the following resources:
+### Step 1 — Discover Nearby Destinations
+Enter your current location or drop a pin on the map. The app will instantly surface the **10 closest travel destinations** in Sri Lanka around you, ranked by proximity.
 
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+### Step 2 — Build Your Itinerary
+Browse the suggested destinations and select the stops you want to visit. Add as many as you like to your personal trip itinerary.
+
+### Step 3 — Get the Optimal Route
+Once your stops are selected, the app calculates the **shortest possible route** across all chosen destinations using an optimized path algorithm. You'll see:
+- The recommended **order to visit** each stop
+- The **total distance** for the full trip
+- Individual distances between each consecutive stop
+
+### Step 4 — View Transit Connections
+For each leg of the journey, the app provides **public transport options** including:
+- 🚌 **Bus routes** — relevant bus numbers and boarding points
+- 🚂 **Train connections** — station names and transfer points along the way
+
+### Step 5 — Start the Trip & Navigate
+Hit **"Start Journey"** to begin. As you travel, each upcoming destination is highlighted live on the **interactive map view** so you always know exactly where you're headed.
+
+### Step 6 — Smart Weather Rerouting
+The app continuously monitors weather conditions at your upcoming stops. If **rain, thunderstorms, or severe weather** is detected:
+- You'll receive an **instant alert**
+- The app suggests **alternative nearby destinations** that are suitable for the current conditions
+- You can accept a suggested alternative or dismiss the alert and continue your original plan
+
+---
+
+## 🤝 Contributing
+
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/YourUsername/TravelPlannerApp/issues).
+
+---
+
+## 📄 License
+
+This project is open-source and available under the [MIT License](LICENSE).
+
+---
+
+*Built with ❤️ in Sri Lanka.*
