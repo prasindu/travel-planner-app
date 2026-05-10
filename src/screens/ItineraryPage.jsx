@@ -33,7 +33,7 @@ export default function ItineraryPage({ optimizedPlaces, startTime, onBack, onSa
   const [activeTabs, setTabs]   = useState({});
   const [expanded, setExpanded] = useState({});
 
-  // --- Phone eke Back Button eka handle kirima ---
+
   useEffect(() => {
     const backAction = () => {
       onBack(); 
@@ -411,7 +411,7 @@ function CarDetail({ step }) {
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,

@@ -9,12 +9,13 @@ import {
   SafeAreaView, 
   Alert,
   Platform,
-  Image
+  Image,
+  RefreshControl 
 } from 'react-native';
 import { 
   MapPin, Plus, Calendar, Clock, Route, Trash2, 
   Play, AlertCircle, LogOut, Globe, 
-  Sun, Moon, Sunset, Plane
+  Sun, Moon, Sunset, Plane, WifiOff, RefreshCw
 } from 'lucide-react-native';
 
 import { getMyTrips, deleteTrip } from '../api/api';
@@ -23,7 +24,6 @@ import { useLanguage } from '../context/LanguageContext';
 export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }) {
   const { t, language, toggleLanguage } = useLanguage();
   
-  // Translation eka file eke nethnam default text eka ganna liyapu podi function eka
   const getT = (key, defaultText) => {
     const text = t(key);
     return text === key ? defaultText : text;
@@ -31,6 +31,7 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
 
   const [trips, setTrips]     = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); 
   const [error, setError]     = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [greeting, setGreeting] = useState({ text: 'Hello', icon: <Sun size={20} color="#facc15" /> });
@@ -51,17 +52,35 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
     }
   };
 
-  const fetchTrips = async () => {
-    setLoading(true);
+  const fetchTrips = async (isRefreshing = false) => {
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
+    
     try {
       const data = await getMyTrips();
       setTrips(data.trips || []);
-    } catch {
-      setError(getT('common.retry', 'Retry') + ' / Trips load failed.');
+    } catch (err) {
+    
+      const errorMsg = err?.message?.toLowerCase() || '';
+      
+      if (errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
+        setError(language === 'si' ? 'අන්තර්ජාල සම්බන්ධතාවය පරීක්ෂා කරන්න.' : 'No internet connection.');
+      } else {
+        setError(language === 'si' ? 'දත්ත ලබාගැනීමට නොහැකි විය.' : 'Failed to load trips.');
+      }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+
+  const onRefresh = () => {
+    fetchTrips(true);
   };
 
   const handleDelete = (id) => {
@@ -80,7 +99,7 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
               await deleteTrip(id);
               setTrips(prev => prev.filter(t => t._id !== id));
             } catch {
-              Alert.alert('Error', 'Delete failed.');
+              Alert.alert('Error', language === 'si' ? 'මකා දැමීම අසාර්ථකයි.' : 'Delete failed.');
             } finally {
               setDeleting(null);
             }
@@ -91,9 +110,9 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
   };
 
   const getStatusColor = (status) => {
-    if (status === 'active') return '#0ea5e9'; // Blue
-    if (status === 'completed') return '#10b981'; // Green
-    return '#64748b'; // Gray
+    if (status === 'active') return '#0ea5e9'; 
+    if (status === 'completed') return '#10b981'; 
+    return '#64748b'; 
   };
 
   const formatDate = (dateStr) => {
@@ -115,7 +134,7 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
   return (
     <SafeAreaView style={styles.container}>
       
-      {/* --- Minimal Transparent Navbar --- */}
+      {/* Navbar */}
       <View style={styles.navbar}>
         <View style={styles.navLeft}>
           <Image 
@@ -136,9 +155,21 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContent} 
+        showsVerticalScrollIndicator={false}
+       
+        refreshControl={
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh} 
+            tintColor="#0ea5e9"
+            colors={['#0ea5e9']} 
+          />
+        }
+      >
         
-        {/* --- Dynamic Greeting & Add Trip Header --- */}
+        {/* Header Section */}
         <View style={styles.headerSection}>
           <View style={styles.headerTopRow}>
             <View style={styles.greetingBadge}>
@@ -146,7 +177,6 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
               <Text style={styles.greetingText}>{greeting.text}</Text>
             </View>
 
-            {/* ME THIYENNE ALUTH ADD TRIP BUTTON EKA */}
             <TouchableOpacity onPress={onNewTrip} style={styles.newTripBtn} activeOpacity={0.8}>
               <Plus size={16} color="#fff" style={{ marginRight: 6 }} />
               <Text style={styles.newTripBtnText}>{getT('dashboard.newTripBtn', 'Plan Trip')}</Text>
@@ -158,17 +188,31 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
           </Text>
         </View>
 
+        {/* Loading State */}
         {loading && <ActivityIndicator size="large" color="#0ea5e9" style={{ marginTop: 50 }} />}
 
-        {error && (
-          <View style={styles.errorBox}>
-            <AlertCircle size={20} color="#f87171" />
-            <Text style={styles.errorText}>{error}</Text>
+        {/* --- Error State (Custom View with Retry Button) --- */}
+        {!loading && error && (
+          <View style={styles.errorContainer}>
+            <View style={styles.errorIconCircle}>
+               {error.includes('internet') || error.includes('අන්තර්ජාල') ? (
+                 <WifiOff size={40} color="#fca5a5" />
+               ) : (
+                 <AlertCircle size={40} color="#fca5a5" />
+               )}
+            </View>
+            <Text style={styles.errorTitle}>{language === 'si' ? 'අපොයි!' : 'Oops!'}</Text>
+            <Text style={styles.errorMsgText}>{error}</Text>
+            
+            <TouchableOpacity onPress={() => fetchTrips()} style={styles.retryBtn} activeOpacity={0.8}>
+              <RefreshCw size={16} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={styles.retryBtnText}>{language === 'si' ? 'නැවත උත්සාහ කරන්න' : 'Try Again'}</Text>
+            </TouchableOpacity>
           </View>
         )}
 
         {/* Empty State */}
-        {!loading && trips.length === 0 && (
+        {!loading && !error && trips.length === 0 && (
           <View style={styles.emptyState}>
             <View style={styles.illustrationCircle}>
               <Plane size={40} color="#0ea5e9" />
@@ -182,8 +226,8 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
           </View>
         )}
 
-        {/* --- Creative Ticket-Style Grid --- */}
-        {!loading && trips.length > 0 && (
+        {/* Trips Grid */}
+        {!loading && !error && trips.length > 0 && (
           <View style={styles.tripsGrid}>
             {trips.map(trip => {
               const statusColor = getStatusColor(trip.status);
@@ -232,7 +276,7 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
                     <View style={styles.notchRight} />
                   </View>
 
-                  {/* Bottom Section (Route Visualizer A to B) */}
+                  {/* Bottom Section */}
                   <View style={styles.ticketBottom}>
                     <View style={styles.routeAtoB}>
                       <View style={styles.routePoint}>
@@ -282,7 +326,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#050812', 
   },
-  /* Navbar */
   navbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -309,7 +352,7 @@ const styles = StyleSheet.create({
   navRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12, // fallback margin is handled if this fails on older RN, but gap works on most
+    gap: 12, 
   },
   iconCircleBtn: {
     width: 38,
@@ -318,15 +361,12 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8, // fallback for gap
+    marginLeft: 8, 
   },
-  
   scrollContent: {
     padding: 16,
     paddingBottom: 40, 
   },
-  
-  /* Header Section */
   headerSection: {
     marginTop: 10,
     marginBottom: 30,
@@ -369,6 +409,52 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     color: '#fff',
     lineHeight: 38,
+  },
+
+
+  errorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(239, 68, 68, 0.05)',
+    padding: 40,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(239, 68, 68, 0.2)',
+    marginTop: 20,
+  },
+  errorIconCircle: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  errorTitle: {
+    fontSize: 22,
+    color: '#f87171',
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  errorMsgText: {
+    color: '#fca5a5',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 24,
+  },
+  retryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#ef4444',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  retryBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 15,
   },
 
   /* Empty State */
@@ -417,21 +503,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
 
-  /* Error */
-  errorBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-  },
-  errorText: {
-    color: '#fca5a5',
-    marginLeft: 12,
-  },
-
-  /* --- Ticket Style Card --- */
+  /* Ticket Style Card */
   tripsGrid: {
     gap: 20,
   },

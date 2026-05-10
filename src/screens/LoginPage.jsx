@@ -57,24 +57,46 @@ export default function LoginPage({ onAuthSuccess }) {
   };
 
   const handleSubmit = async () => {
+    // 1. Frontend Validations
     if (!email || !password) {
       return setError(language === 'si' ? 'කරුණාකර ඊමේල් ලිපිනය සහ මුරපදය ඇතුළත් කරන්න.' : 'Please enter your email and password.');
     }
     if (mode === 'register' && !name) {
       return setError(language === 'si' ? 'කරුණාකර ඔබගේ නම ඇතුළත් කරන්න.' : 'Please enter your name.');
     }
+    
     setLoading(true);
     setError(null);
     
     try {
       let data = mode === 'login' ? await login(email, password) : await register(name, email, password);
+      
       if (data.success) {
         await AsyncStorage.setItem('lt_token', data.token);
         await AsyncStorage.setItem('lt_user', JSON.stringify(data.user));
         if (onAuthSuccess) onAuthSuccess(data.user);
       }
     } catch (e) {
-      setError(e?.response?.data?.error || (language === 'si' ? 'අසාර්ථකයි.' : 'Failed.'));
+     
+      let backendError = e?.response?.data?.error || e?.message || '';
+      let displayMsg = '';
+
+      
+      if (backendError.includes('Invalid email or password')) {
+        displayMsg = language === 'si' ? 'ඊමේල් ලිපිනය හෝ මුරපදය වැරදියි.' : 'Invalid email or password.';
+      } 
+      else if (backendError.includes('Email already exists')) {
+        displayMsg = language === 'si' ? 'මෙම ඊමේල් ලිපිනයෙන් දැනටමත් ගිණුමක් ඇත.' : 'An account with this email already exists.';
+      } 
+      else if (backendError.includes('All fields are required')) {
+        displayMsg = language === 'si' ? 'කරුණාකර සියලුම විස්තර ඇතුළත් කරන්න.' : 'All fields are required.';
+      } 
+      else {
+        
+        displayMsg = language === 'si' ? 'ක්‍රියාවලිය අසාර්ථකයි. කරුණාකර නැවත උත්සාහ කරන්න.' : 'Authentication failed. Please try again.';
+      }
+
+      setError(displayMsg); 
     } finally {
       setLoading(false);
     }

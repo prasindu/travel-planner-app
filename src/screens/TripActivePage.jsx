@@ -16,12 +16,12 @@ import {
 import { WebView } from 'react-native-webview'; 
 import { 
   MapPin, ChevronLeft, Navigation, Check, 
-  AlertTriangle, RefreshCw, Map, List, Compass, ArrowRight, Wind, Droplets
+  AlertTriangle, RefreshCw, Map, List, ArrowRight, Wind, Droplets,
+  Bus, Train, Car 
 } from 'lucide-react-native';
 
-import { updateTripStatus, getWeather } from '../api/api'; 
+import { updateTripStatus, getWeather, getItinerary } from '../api/api'; 
 import { useLanguage } from '../context/LanguageContext';
-
 import { VITE_GOOGLE_MAPS_KEY } from '@env';
 
 const MAPS_KEY = VITE_GOOGLE_MAPS_KEY;
@@ -32,22 +32,65 @@ const getWeatherIcon = (condition) => {
   return icons[condition] ? icons[condition] : '🌤️';
 };
 
-// ── Google Maps URL builder ───────────────────────────────────
+
+const formatPlaceForMap = (place) => {
+  if (!place) return '';
+  const isCoords = /^[0-9.-]+,\s*[0-9.-]+$/.test(place.trim());
+  return isCoords ? place.trim() : `${place.trim()}, Sri Lanka`;
+};
+
 const buildMapsUrl = (places, currentIdx) => {
-  if (!places || places.length < 2) return null;
-  const origin = encodeURIComponent(places[currentIdx] + ', Sri Lanka'); 
-  const dest   = encodeURIComponent(places[places.length - 1] + ', Sri Lanka');
+  if (!places || places.length < 2) return '';
+  
+  const origin = encodeURIComponent(formatPlaceForMap(places[currentIdx])); 
+  const dest   = encodeURIComponent(formatPlaceForMap(places[places.length - 1]));
+  
   const remainingPlaces = places.slice(currentIdx + 1, -1);
-  const wps    = remainingPlaces.length > 0 ? remainingPlaces.map(p => encodeURIComponent(p + ', Sri Lanka')).join('|') : '';
+  const wps = remainingPlaces.length > 0 
+    ? remainingPlaces.map(p => encodeURIComponent(formatPlaceForMap(p))).join('|') 
+    : '';
+  
+ 
   return `https://www.google.com/maps/embed/v1/directions?key=${MAPS_KEY}&origin=${origin}&destination=${dest}${wps ? `&waypoints=${wps}` : ''}&mode=driving`;
 };
 
-const buildNavUrl = (from, to) => {
-  const f = encodeURIComponent(from + ', Sri Lanka');
-  const t = encodeURIComponent(to  + ', Sri Lanka');
-  return `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=driving`;
+// ── Google Maps HTML Wrapper (FIXED) ──────────────────────────
+const getMapHtml = (url) => {
+  if (!url) return '';
+  return `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <style>
+          body, html { margin: 0; padding: 0; height: 100%; width: 100%; background-color: #0f172a; }
+          iframe { width: 100%; height: 100%; border: none; }
+        </style>
+      </head>
+      <body>
+        <iframe src="${url}" allowfullscreen></iframe>
+      </body>
+    </html>
+  `;
 };
 
+
+const buildNavUrl = (from, to) => {
+  if (!from || !to) return null;
+
+  
+  const isFromCoords = /^[0-9.-]+,\s*[0-9.-]+$/.test(from.trim());
+  const cleanFrom = isFromCoords ? from.trim() : `${from}, Sri Lanka`;
+
+  const isToCoords = /^[0-9.-]+,\s*[0-9.-]+$/.test(to.trim());
+  const cleanTo = isToCoords ? to.trim() : `${to}, Sri Lanka`;
+
+  const f = encodeURIComponent(cleanFrom);
+  const t = encodeURIComponent(cleanTo);
+  
+  // නිවැරදි Universal Google Maps Directions URL එක
+  return `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=driving`;
+};
 export default function TripActivePage({ trip, onBack, onComplete }) {
   const { t } = useLanguage();
   
@@ -63,7 +106,14 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
   const [showAlerts, setShowAlerts]     = useState({});
   const [saving, setSaving]             = useState(false);
 
+  // --- Transit Options State ---
+  const [transitOptions, setTransitOptions] = useState(null);
+  const [loadingTransit, setLoadingTransit] = useState(false);
+  const [activeTransitTab, setActiveTransitTab] = useState('car'); 
+
   const stops = trip.optimizedOrder ? trip.optimizedOrder : [];
+  const currentPlace  = stops[currentIdx];
+  const nextPlace     = stops[currentIdx + 1];
 
   // --- Animation Setup ---
   const pulseAnim = useRef(new Animated.Value(1)).current;
@@ -83,12 +133,16 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
     return () => backHandler.remove();
   }, [onBack]);
 
-  // --- Weather Fetch Logic ---
+  // --- Data Fetching Logic ---
   useEffect(() => {
-    fetchWeatherForStop(stops[currentIdx]);
-    if (currentIdx < stops.length - 1) fetchWeatherForStop(stops[currentIdx + 1]);
-  }, [currentIdx]);
+    fetchWeatherForStop(currentPlace);
+    if (nextPlace) {
+      fetchWeatherForStop(nextPlace);
+      fetchTransitOptions(currentPlace, nextPlace); 
+    }
+  }, [currentIdx, currentPlace, nextPlace]);
 
+  // Fetch Weather
   const fetchWeatherForStop = useCallback(async (place) => {
     if (!place || weatherData[place]) return;
     setLoadingWx(prev => ({ ...prev, [place]: true }));
@@ -101,8 +155,6 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
         const { lat, lng } = geoData.results[0].geometry.location;
         const wx = await getWeather({ lat, lng, city: place.split(',')[0], locationName: place, locationType: 'tourist_attraction' });
 
-        console.log("Full JSON from Backend for " + place + ":", JSON.stringify(wx, null, 2));
-
         if (wx && wx.success) {
           setWeatherData(prev => ({ ...prev, [place]: wx }));
           if (wx.rerouteSuggested) setShowAlerts(prev => ({ ...prev, [place]: true }));
@@ -114,6 +166,22 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
       setLoadingWx(prev => ({ ...prev, [place]: false }));
     }
   }, [weatherData]);
+
+  // Fetch Transit Options
+  const fetchTransitOptions = async (from, to) => {
+    setLoadingTransit(true);
+    try {
+      const res = await getItinerary([from, to], "08:00"); 
+      if (res && res.stepByStep && res.stepByStep.length > 0) {
+        setTransitOptions(res.stepByStep[0].options); 
+      }
+    } catch (error) {
+      console.log('Transit fetch failed', error);
+      setTransitOptions(null);
+    } finally {
+      setLoadingTransit(false);
+    }
+  };
 
   const handleNextStop = async () => {
     if (currentIdx >= stops.length - 1) return;
@@ -136,11 +204,16 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
     Linking.openURL(url).catch(() => console.log('Failed to open maps'));
   };
 
-  const currentPlace  = stops[currentIdx];
-  const nextPlace     = stops[currentIdx + 1];
   const currentWx     = weatherData[currentPlace];
   const isLastStop    = currentIdx === stops.length - 1;
   const progress      = stops.length > 1 ? (currentIdx / (stops.length - 1)) * 100 : 100;
+
+  // Transit Tabs
+  const transitTabs = [
+    { key: 'car',   label: getT('itinerary.drive', 'Drive'), icon: Car,   color: '#10b981' }, 
+    { key: 'train', label: getT('itinerary.train', 'Train'), icon: Train, color: '#a855f7' }, 
+    { key: 'bus',   label: getT('itinerary.bus', 'Bus'),     icon: Bus,   color: '#0ea5e9' }, 
+  ];
 
   return (
     <SafeAreaView style={styles.mainContainer}>
@@ -167,6 +240,8 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        
+        {/* --- Current Stop Details --- */}
         <View style={styles.currentStopCard}>
           <View style={styles.cardGlow} />
           <View style={styles.currentStopHeader}>
@@ -182,6 +257,7 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
             <Text style={styles.currentPlaceSub} numberOfLines={1}>{currentPlace.split(',').slice(1).join(',').trim()}</Text>
           ) : null}
 
+          {/* Navigation Button */}
           {nextPlace ? (
             <TouchableOpacity onPress={() => openNavigation(currentPlace, nextPlace)} style={styles.navigateBtn} activeOpacity={0.8}>
               <Navigation size={18} color="#fff" style={{ marginRight: 8, flexShrink: 0 }} />
@@ -189,6 +265,7 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
             </TouchableOpacity>
           ) : null}
 
+          {/* Current Weather */}
           {loadingWx[currentPlace] ? (
             <View style={styles.loadingWxBox}><ActivityIndicator size="small" color="#0ea5e9" style={{ marginRight: 8 }} /><Text style={styles.loadingWxText}>{getT('activeTrip.weatherLoading', 'Checking weather...')}</Text></View>
           ) : currentWx ? (
@@ -204,6 +281,7 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
             </View>
           ) : null}
 
+          {/* Weather Alert */}
           {(currentWx && currentWx.rerouteSuggested && showAlerts[currentPlace]) ? (
             <View style={styles.alertBox}>
               <View style={styles.alertHeader}><AlertTriangle size={18} color="#facc15" style={{ marginRight: 8 }} /><Text style={styles.alertTitle}>{getT('activeTrip.weatherAlert', 'WEATHER ALERT')}</Text></View>
@@ -224,55 +302,88 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
           ) : null}
         </View>
 
+        {/* --- Next Stop & Transit Options --- */}
         {nextPlace ? (
-          <View style={styles.nextStopCard}>
-            <View style={styles.nextStopLeft}><Text style={styles.nextStopLabel}>{getT('activeTrip.nextStopTitle', 'UPCOMING STOP')}</Text><Text style={styles.nextPlaceName}>{nextPlace.split(',')[0]}</Text></View>
-            <View style={styles.nextStopRight}><Text style={{ fontSize: 40 }}>{getWeatherIcon(weatherData[nextPlace]?.weather?.condition)}</Text></View>
+          <View style={styles.nextStopCardWrapper}>
+            <View style={styles.nextStopHeader}>
+              <View style={styles.nextStopLeft}>
+                <Text style={styles.nextStopLabel}>{getT('activeTrip.nextStopTitle', 'UPCOMING STOP')}</Text>
+                <Text style={styles.nextPlaceName}>{nextPlace.split(',')[0]}</Text>
+              </View>
+              <View style={styles.nextStopRight}>
+                <Text style={{ fontSize: 40 }}>{getWeatherIcon(weatherData[nextPlace]?.weather?.condition)}</Text>
+              </View>
+            </View>
+
+            {/* Transit Options Section */}
+            {loadingTransit ? (
+               <View style={{ padding: 20, alignItems: 'center' }}><ActivityIndicator size="small" color="#10b981" /></View>
+            ) : transitOptions ? (
+              <View style={styles.transitSection}>
+                <Text style={styles.transitTitle}>How to get there:</Text>
+                
+                {/* Tabs */}
+                <View style={styles.segmentedControl}>
+                  {transitTabs.map(({ key, label, icon: Icon, color }) => {
+                    const isAvailable = transitOptions[key]?.summary !== 'Not available';
+                    const isActive = activeTransitTab === key;
+                    return (
+                      <TouchableOpacity 
+                        key={key} 
+                        onPress={() => setActiveTransitTab(key)}
+                        style={[styles.segmentBtn, isActive ? { backgroundColor: color } : null]}
+                      >
+                        <Icon size={14} color={isActive ? '#fff' : '#64748b'} style={{ marginRight: 6 }} />
+                        <Text style={[styles.segmentBtnText, isActive ? { color: '#fff' } : { color: '#64748b' }]}>
+                          {label}
+                        </Text>
+                        {!isAvailable && !isActive ? <View style={styles.unavailDot} /> : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* Selected Tab Content */}
+                <View style={styles.transitContentBox}>
+                  {transitOptions[activeTransitTab]?.summary !== 'Not available' ? (
+                     <Text style={styles.transitSummaryText}>
+                       {transitOptions[activeTransitTab]?.summary}
+                     </Text>
+                  ) : (
+                     <Text style={[styles.transitSummaryText, {color: '#fca5a5'}]}>
+                       {getT('itinerary.notAvailable', 'Not available for this route.')}
+                     </Text>
+                  )}
+                </View>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
- {view === 'map' ? (
-  <View style={styles.mapCard}>
-    <View style={styles.webViewContainer}>
-      {MAPS_KEY ? (
-        <WebView 
-          
-          source={{ 
-            html: `
-              <!DOCTYPE html>
-              <html>
-                <head>
-                  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-                  <style>
-                    body { margin: 0; padding: 0; background-color: #0f172a; }
-                    iframe { width: 100vw; height: 100vh; border: none; }
-                  </style>
-                </head>
-                <body>
-                  <iframe 
-                    src="${buildMapsUrl(stops, currentIdx)}" 
-                    allowfullscreen>
-                  </iframe>
-                </body>
-              </html>
-            ` 
-          }} 
-          style={{ flex: 1 }} 
-          scrollEnabled={false}
-          javaScriptEnabled={true}
-          domStorageEnabled={true}
-          originWhitelist={['*']}
-        />
-      ) : (
-        <View style={styles.noMapBox}>
-          <Map size={48} color="rgba(255,255,255,0.1)" />
-          <Text style={styles.noMapText}>Map Unavailable</Text>
-        </View>
-      )}
-    </View>
-  </View>
-) : null}
+        {/* --- Maps View (FIXED API ENDPOINT) --- */}
+        {view === 'map' ? (
+          <View style={styles.mapCard}>
+            <View style={styles.webViewContainer}>
+              {MAPS_KEY ? (
+                <WebView 
+                  originWhitelist={['*']}
+                  source={{ html: getMapHtml(buildMapsUrl(stops, currentIdx)) }} 
+                  style={{ flex: 1 }} 
+                  scrollEnabled={false}
+                  javaScriptEnabled={true}
+                  domStorageEnabled={true}
+                />
+              ) : (
+                <View style={styles.noMapBox}>
+                  <Map size={48} color="rgba(255,255,255,0.1)" />
+                  <Text style={styles.noMapText}>Map Unavailable</Text>
+                </View>
+              )}
+            </View>
+          </View>
+        ) : null}
 
+        {/* --- List View --- */}
         {view === 'list' ? (
           <View style={styles.timelineCard}>
             <Text style={styles.timelineHeader}>JOURNEY TIMELINE</Text>
@@ -300,6 +411,7 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
         ) : null}
       </ScrollView>
 
+      {/* --- Footer --- */}
       <View style={styles.floatingBottomNav}>
         <TouchableOpacity onPress={() => { setWeatherData(prev => { const n = {...prev}; delete n[currentPlace]; return n; }); fetchWeatherForStop(currentPlace); }} style={styles.refreshBtn}><RefreshCw size={22} color="#cbd5e1" /></TouchableOpacity>
         <TouchableOpacity onPress={isLastStop ? handleComplete : handleNextStop} disabled={saving} style={[styles.mainActionBtn, isLastStop ? styles.btnComplete : styles.btnNext, saving && {opacity: 0.7}]}>
@@ -352,15 +464,24 @@ const styles = StyleSheet.create({
   altAddress: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 },
   altRating: { color: '#facc15', fontSize: 11, fontWeight: 'bold', marginTop: 6 },
   dismissBtn: { color: '#facc15', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginTop: 16, textAlign: 'center', padding: 8, backgroundColor: 'rgba(234, 179, 8, 0.1)', borderRadius: 8 },
-  nextStopCard: { flexDirection: 'row', backgroundColor: '#0f172a', borderRadius: 24, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', alignItems: 'center', justifyContent: 'space-between' },
+  
+  /* Next Stop Card & Transit Section */
+  nextStopCardWrapper: { backgroundColor: '#0f172a', borderRadius: 24, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
+  nextStopHeader: { flexDirection: 'row', padding: 20, alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   nextStopLeft: { flex: 1 },
   nextStopLabel: { color: '#64748b', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8 },
-  nextPlaceName: { color: '#fff', fontSize: 22, fontWeight: '900', marginBottom: 12 },
-  nextWxRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 12 },
-  nextTempBadge: { backgroundColor: 'rgba(255,255,255,0.1)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginRight: 8 },
-  nextTempText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  nextCondText: { color: '#94a3b8', fontSize: 13, fontWeight: '600' },
+  nextPlaceName: { color: '#fff', fontSize: 22, fontWeight: '900' },
   nextStopRight: { marginLeft: 16 },
+  
+  transitSection: { padding: 16 },
+  transitTitle: { color: '#94a3b8', fontSize: 12, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase' },
+  segmentedControl: { flexDirection: 'row', backgroundColor: '#050812', borderRadius: 10, padding: 4, marginBottom: 12 },
+  segmentBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8, position: 'relative' },
+  segmentBtnText: { fontSize: 12, fontWeight: 'bold' },
+  unavailDot: { position: 'absolute', top: 6, right: 8, width: 4, height: 4, borderRadius: 2, backgroundColor: '#ef4444' },
+  transitContentBox: { backgroundColor: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
+  transitSummaryText: { color: '#e2e8f0', fontSize: 13, lineHeight: 20 },
+
   mapCard: { backgroundColor: '#0f172a', borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 20 },
   webViewContainer: { height: 350, backgroundColor: 'rgba(0,0,0,0.2)' },
   noMapBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
