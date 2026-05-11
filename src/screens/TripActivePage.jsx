@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import notifee from '@notifee/react-native';
 import { 
   View, 
   Text, 
@@ -16,7 +17,7 @@ import {
 import { WebView } from 'react-native-webview'; 
 import { 
   MapPin, ChevronLeft, Navigation, Check, 
-  AlertTriangle, RefreshCw, Map, List, ArrowRight, Wind, Droplets,
+  AlertTriangle, RefreshCw, Map, List, Wind, Droplets,
   Bus, Train, Car 
 } from 'lucide-react-native';
 
@@ -26,12 +27,11 @@ import { VITE_GOOGLE_MAPS_KEY } from '@env';
 
 const MAPS_KEY = VITE_GOOGLE_MAPS_KEY;
 
-// ── Weather helpers ───────────────────────────────────────────
+// ── Weather & Google Maps Helpers ───────────────────────────
 const getWeatherIcon = (condition) => {
   const icons = { Clear: '☀️', Clouds: '☁️', Rain: '🌧️', Drizzle: '🌦️', Thunderstorm: '⛈️', Snow: '❄️', Mist: '🌫️' };
   return icons[condition] ? icons[condition] : '🌤️';
 };
-
 
 const formatPlaceForMap = (place) => {
   if (!place) return '';
@@ -41,20 +41,15 @@ const formatPlaceForMap = (place) => {
 
 const buildMapsUrl = (places, currentIdx) => {
   if (!places || places.length < 2) return '';
-  
   const origin = encodeURIComponent(formatPlaceForMap(places[currentIdx])); 
   const dest   = encodeURIComponent(formatPlaceForMap(places[places.length - 1]));
-  
   const remainingPlaces = places.slice(currentIdx + 1, -1);
   const wps = remainingPlaces.length > 0 
     ? remainingPlaces.map(p => encodeURIComponent(formatPlaceForMap(p))).join('|') 
     : '';
-  
- 
   return `https://www.google.com/maps/embed/v1/directions?key=${MAPS_KEY}&origin=${origin}&destination=${dest}${wps ? `&waypoints=${wps}` : ''}&mode=driving`;
 };
 
-// ── Google Maps HTML Wrapper (FIXED) ──────────────────────────
 const getMapHtml = (url) => {
   if (!url) return '';
   return `
@@ -74,23 +69,13 @@ const getMapHtml = (url) => {
   `;
 };
 
-
 const buildNavUrl = (from, to) => {
   if (!from || !to) return null;
-
-  
-  const isFromCoords = /^[0-9.-]+,\s*[0-9.-]+$/.test(from.trim());
-  const cleanFrom = isFromCoords ? from.trim() : `${from}, Sri Lanka`;
-
-  const isToCoords = /^[0-9.-]+,\s*[0-9.-]+$/.test(to.trim());
-  const cleanTo = isToCoords ? to.trim() : `${to}, Sri Lanka`;
-
-  const f = encodeURIComponent(cleanFrom);
-  const t = encodeURIComponent(cleanTo);
-  
-  // නිවැරදි Universal Google Maps Directions URL එක
+  const f = encodeURIComponent(formatPlaceForMap(from));
+  const t = encodeURIComponent(formatPlaceForMap(to));
   return `https://www.google.com/maps/dir/?api=1&origin=${f}&destination=${t}&travelmode=driving`;
 };
+
 export default function TripActivePage({ trip, onBack, onComplete }) {
   const { t } = useLanguage();
   
@@ -101,15 +86,15 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
 
   const [currentIdx, setCurrentIdx]     = useState(trip.currentStopIndex ? trip.currentStopIndex : 0);
   const [view, setView]                 = useState('map');  
+  
+  // States for API Data
   const [weatherData, setWeatherData]   = useState({});     
   const [loadingWx, setLoadingWx]       = useState({});
   const [showAlerts, setShowAlerts]     = useState({});
-  const [saving, setSaving]             = useState(false);
-
-  // --- Transit Options State ---
   const [transitOptions, setTransitOptions] = useState(null);
   const [loadingTransit, setLoadingTransit] = useState(false);
   const [activeTransitTab, setActiveTransitTab] = useState('car'); 
+  const [saving, setSaving]             = useState(false);
 
   const stops = trip.optimizedOrder ? trip.optimizedOrder : [];
   const currentPlace  = stops[currentIdx];
@@ -133,18 +118,13 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
     return () => backHandler.remove();
   }, [onBack]);
 
-  // --- Data Fetching Logic ---
-  useEffect(() => {
-    fetchWeatherForStop(currentPlace);
-    if (nextPlace) {
-      fetchWeatherForStop(nextPlace);
-      fetchTransitOptions(currentPlace, nextPlace); 
-    }
-  }, [currentIdx, currentPlace, nextPlace]);
-
-  // Fetch Weather
+  // ── OPTIMIZED API FETCHING ───────────────────────────────────────
+  
+  // 1. Weather Fetcher (With Strict Caching)
+ // 1. Weather Fetcher (With Strict Caching & Instant Notifications)
   const fetchWeatherForStop = useCallback(async (place) => {
-    if (!place || weatherData[place]) return;
+    if (!place || weatherData[place] || loadingWx[place]) return; 
+
     setLoadingWx(prev => ({ ...prev, [place]: true }));
     try {
       const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(place + ', Sri Lanka')}&key=${MAPS_KEY}`;
@@ -157,18 +137,48 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
 
         if (wx && wx.success) {
           setWeatherData(prev => ({ ...prev, [place]: wx }));
-          if (wx.rerouteSuggested) setShowAlerts(prev => ({ ...prev, [place]: true }));
+          
+          
+          if (wx.rerouteSuggested) {
+            setShowAlerts(prev => ({ ...prev, [place]: true }));
+            
+            
+            try {
+              const channelId = await notifee.createChannel({
+                id: 'weather-alerts',
+                name: 'Weather Alerts',
+                importance: 4, 
+              });
+
+              await notifee.displayNotification({
+                title: '⚠️ Weather Alert!',
+                body: `Bad weather is expected at ${place.split(',')[0]}. Please travel safely!`,
+                android: {
+                  channelId,
+                  smallIcon: 'ic_launcher', 
+                  color: '#ef4444', 
+                  pressAction: {
+                    id: 'default',
+                  },
+                },
+              });
+            } catch (notifyErr) {
+              console.log("Failed to send weather notification: ", notifyErr);
+            }
+          }
+        
         }
       }
     } catch (e) {
-      console.log('Weather fetch failed', e);
+      console.log(`Weather fetch failed for ${place}:`, e);
     } finally {
       setLoadingWx(prev => ({ ...prev, [place]: false }));
     }
-  }, [weatherData]);
+  }, [weatherData, loadingWx]);
 
-  // Fetch Transit Options
-  const fetchTransitOptions = async (from, to) => {
+  // 2. Transit Options Fetcher
+  const fetchTransitOptions = useCallback(async (from, to) => {
+    if (!from || !to) return;
     setLoadingTransit(true);
     try {
       const res = await getItinerary([from, to], "08:00"); 
@@ -181,12 +191,35 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
     } finally {
       setLoadingTransit(false);
     }
-  };
+  }, []);
+
+  // 3. Centralized Loading Logic (Only triggers when Current Stop changes)
+  useEffect(() => {
+    const loadRequiredData = async () => {
+     
+      await fetchWeatherForStop(currentPlace);
+      
+      
+      if (nextPlace) {
+        Promise.all([
+          fetchWeatherForStop(nextPlace),
+          fetchTransitOptions(currentPlace, nextPlace)
+        ]).catch(e => console.log("Failed to load next stop data", e));
+      } else {
+       
+        setTransitOptions(null);
+      }
+    };
+
+    loadRequiredData();
+  }, [currentIdx]); 
+
+  // ─────────────────────────────────────────────────────────────────
 
   const handleNextStop = async () => {
     if (currentIdx >= stops.length - 1) return;
     const newIdx = currentIdx + 1;
-    setCurrentIdx(newIdx);
+    setCurrentIdx(newIdx); 
     try { await updateTripStatus(trip._id, 'active', newIdx); } catch {}
   };
 
@@ -208,7 +241,6 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
   const isLastStop    = currentIdx === stops.length - 1;
   const progress      = stops.length > 1 ? (currentIdx / (stops.length - 1)) * 100 : 100;
 
-  // Transit Tabs
   const transitTabs = [
     { key: 'car',   label: getT('itinerary.drive', 'Drive'), icon: Car,   color: '#10b981' }, 
     { key: 'train', label: getT('itinerary.train', 'Train'), icon: Train, color: '#a855f7' }, 
@@ -217,12 +249,13 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
 
   return (
     <SafeAreaView style={styles.mainContainer}>
+      {/* Navbar */}
       <View style={styles.topNavbar}>
         <TouchableOpacity onPress={onBack} style={styles.topBackBtn}>
           <ChevronLeft size={24} color="#fff" />
         </TouchableOpacity>
         <View style={styles.headerTitleBox}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{trip.title ? trip.title : 'Trip'}</Text>
+          <Text style={styles.headerTitle} numberOfLines={1}>{trip.title || 'Trip'}</Text>
           <Text style={styles.headerSubtitle}>{getT('activeTrip.stops', 'Stops')} {currentIdx + 1} / {stops.length}</Text>
         </View>
         <View style={styles.viewToggle}>
@@ -315,14 +348,11 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
               </View>
             </View>
 
-            {/* Transit Options Section */}
             {loadingTransit ? (
                <View style={{ padding: 20, alignItems: 'center' }}><ActivityIndicator size="small" color="#10b981" /></View>
             ) : transitOptions ? (
               <View style={styles.transitSection}>
                 <Text style={styles.transitTitle}>How to get there:</Text>
-                
-                {/* Tabs */}
                 <View style={styles.segmentedControl}>
                   {transitTabs.map(({ key, label, icon: Icon, color }) => {
                     const isAvailable = transitOptions[key]?.summary !== 'Not available';
@@ -342,8 +372,6 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
                     );
                   })}
                 </View>
-
-                {/* Selected Tab Content */}
                 <View style={styles.transitContentBox}>
                   {transitOptions[activeTransitTab]?.summary !== 'Not available' ? (
                      <Text style={styles.transitSummaryText}>
@@ -360,7 +388,7 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
           </View>
         ) : null}
 
-        {/* --- Maps View (FIXED API ENDPOINT) --- */}
+        {/* --- Maps View --- */}
         {view === 'map' ? (
           <View style={styles.mapCard}>
             <View style={styles.webViewContainer}>
@@ -411,9 +439,28 @@ export default function TripActivePage({ trip, onBack, onComplete }) {
         ) : null}
       </ScrollView>
 
-      {/* --- Footer --- */}
+      {/* --- Footer (OPTIMIZED REFRESH) --- */}
       <View style={styles.floatingBottomNav}>
-        <TouchableOpacity onPress={() => { setWeatherData(prev => { const n = {...prev}; delete n[currentPlace]; return n; }); fetchWeatherForStop(currentPlace); }} style={styles.refreshBtn}><RefreshCw size={22} color="#cbd5e1" /></TouchableOpacity>
+        <TouchableOpacity 
+          onPress={() => { 
+            
+            setWeatherData(prev => { 
+              const n = {...prev}; 
+              delete n[currentPlace]; 
+              if(nextPlace) delete n[nextPlace];
+              return n; 
+            }); 
+            fetchWeatherForStop(currentPlace);
+            if(nextPlace) {
+              fetchWeatherForStop(nextPlace);
+              fetchTransitOptions(currentPlace, nextPlace);
+            }
+          }} 
+          style={styles.refreshBtn}
+        >
+          <RefreshCw size={22} color="#cbd5e1" />
+        </TouchableOpacity>
+        
         <TouchableOpacity onPress={isLastStop ? handleComplete : handleNextStop} disabled={saving} style={[styles.mainActionBtn, isLastStop ? styles.btnComplete : styles.btnNext, saving && {opacity: 0.7}]}>
           {saving ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }} /> : <Check size={22} color="#fff" style={{ marginRight: 8 }} />}
           <Text style={styles.mainActionText}>{isLastStop ? getT('activeTrip.tripComplete', 'Finish Journey') : getT('activeTrip.nextStopBtn', 'Next Stop')}</Text>
@@ -464,15 +511,12 @@ const styles = StyleSheet.create({
   altAddress: { color: 'rgba(255,255,255,0.5)', fontSize: 12, marginTop: 4 },
   altRating: { color: '#facc15', fontSize: 11, fontWeight: 'bold', marginTop: 6 },
   dismissBtn: { color: '#facc15', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginTop: 16, textAlign: 'center', padding: 8, backgroundColor: 'rgba(234, 179, 8, 0.1)', borderRadius: 8 },
-  
-  /* Next Stop Card & Transit Section */
   nextStopCardWrapper: { backgroundColor: '#0f172a', borderRadius: 24, marginBottom: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', overflow: 'hidden' },
   nextStopHeader: { flexDirection: 'row', padding: 20, alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.05)' },
   nextStopLeft: { flex: 1 },
   nextStopLabel: { color: '#64748b', fontSize: 11, fontWeight: 'bold', letterSpacing: 1, marginBottom: 8 },
   nextPlaceName: { color: '#fff', fontSize: 22, fontWeight: '900' },
   nextStopRight: { marginLeft: 16 },
-  
   transitSection: { padding: 16 },
   transitTitle: { color: '#94a3b8', fontSize: 12, fontWeight: 'bold', marginBottom: 12, textTransform: 'uppercase' },
   segmentedControl: { flexDirection: 'row', backgroundColor: '#050812', borderRadius: 10, padding: 4, marginBottom: 12 },
@@ -481,7 +525,6 @@ const styles = StyleSheet.create({
   unavailDot: { position: 'absolute', top: 6, right: 8, width: 4, height: 4, borderRadius: 2, backgroundColor: '#ef4444' },
   transitContentBox: { backgroundColor: 'rgba(255,255,255,0.02)', padding: 12, borderRadius: 10, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
   transitSummaryText: { color: '#e2e8f0', fontSize: 13, lineHeight: 20 },
-
   mapCard: { backgroundColor: '#0f172a', borderRadius: 24, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)', marginBottom: 20 },
   webViewContainer: { height: 350, backgroundColor: 'rgba(0,0,0,0.2)' },
   noMapBox: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },

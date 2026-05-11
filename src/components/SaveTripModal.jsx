@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import notifee, { TriggerType } from '@notifee/react-native';
 import { 
   Modal, 
   View, 
@@ -50,6 +51,50 @@ export default function SaveTripModal({
     }
   };
 
+
+  const scheduleTripNotification = async (tripTitle, tripDate, tripTime) => {
+  try {
+    
+    const channelId = await notifee.createChannel({
+      id: 'trip-reminders',
+      name: 'Trip Reminders',
+      sound: 'default',
+    });
+
+    
+    const triggerDate = new Date(tripDate);
+    const [hours, minutes] = tripTime.split(':');
+    triggerDate.setHours(parseInt(hours), parseInt(minutes) - 30, 0);
+
+   
+    if (triggerDate.getTime() < Date.now()) return;
+
+   
+    const trigger = {
+      type: TriggerType.TIMESTAMP,
+      timestamp: triggerDate.getTime(),
+    };
+
+    await notifee.createTriggerNotification(
+      {
+        title: '🎒 Ready for your adventure?',
+        body: `Your trip '${tripTitle}' starts in 30 minutes! Don't be late.`,
+        android: {
+          channelId,
+          smallIcon: 'ic_launcher', 
+          pressAction: {
+            id: 'default',
+          },
+        },
+      },
+      trigger
+    );
+    console.log("Trip Reminder Scheduled!");
+  } catch (error) {
+    console.log("Notification scheduling failed: ", error);
+  }
+};
+
   const handleSave = async () => {
     if (!title.trim()) return setError(t('saveModal.errName'));
     if (!tripDate)     return setError(t('saveModal.errDate'));
@@ -70,6 +115,7 @@ export default function SaveTripModal({
 
       if (data.success) {
         setSaved(true);
+        await scheduleTripNotification(title.trim(), tripDate, startTime || '06:00');
         setTimeout(() => {
           if (onSaved) onSaved(data.trip);
         }, 1500);

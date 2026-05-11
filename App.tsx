@@ -1,3 +1,4 @@
+import notifee from '@notifee/react-native';
 import React, { useState, useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet, StatusBar, SafeAreaView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,6 +13,7 @@ import ItineraryPageRaw from './src/screens/ItineraryPage';
 import LoginPageRaw from './src/screens/LoginPage';
 import DashboardPageRaw from './src/screens/DashboardPage';
 import TripActivePageRaw from './src/screens/TripActivePage';
+import ProfilePageRaw from './src/screens/ProfilePage'; 
 import { LanguageProvider } from './src/context/LanguageContext';
 
 // ── .jsx components as any cast (prop type conflicts fix) ─────
@@ -24,6 +26,7 @@ const ItineraryPage  = ItineraryPageRaw as any;
 const LoginPage      = LoginPageRaw as any;
 const DashboardPage  = DashboardPageRaw as any;
 const TripActivePage = TripActivePageRaw as any;
+const ProfilePage    = ProfilePageRaw as any; 
 
 // ── Types Definition ──────────────────────────────────────────
 interface UserData {
@@ -50,7 +53,8 @@ export default function App() {
   const [user, setUser] = useState<UserData | null>(null);
 
   // ── App View ──────────────────────────────────────────────
-  type AppView = 'login' | 'dashboard' | 'planner' | 'active-trip';
+
+  type AppView = 'login' | 'dashboard' | 'planner' | 'active-trip' | 'profile';
   const [view, setView] = useState<AppView>('login');
 
   // ── Active Trip ───────────────────────────────────────────
@@ -67,6 +71,14 @@ export default function App() {
   // ── Save Trip Modal ───────────────────────────────────────
   const [showSave, setShowSave] = useState(false);
 
+
+    useEffect(() => {
+   
+    async function requestUserPermission() {
+      await notifee.requestPermission();
+    }
+    requestUserPermission();
+  }, []);
   // ── Check Login Status on Mount ───────────────────────────
   useEffect(() => {
     const checkAuth = async () => {
@@ -150,13 +162,24 @@ export default function App() {
       />
     );
   }
+ 
+  else if (view === 'profile') {
+    currentView = (
+      <ProfilePage 
+        user={user}
+        onBack={() => setView('dashboard')}
+        onLogout={handleLogout}
+      />
+    );
+  }
   else if (view === 'dashboard') {
     currentView = (
       <DashboardPage
         user={user}
         onNewTrip={handleNewTrip}
         onStartTrip={handleStartTrip}
-        onLogout={handleLogout}
+      
+        onNavigateToProfile={() => setView('profile')} 
       />
     );
   }
@@ -178,7 +201,6 @@ export default function App() {
               selectedPlaces={selectedPlaces}
               setSelectedPlaces={setSelected}
               onNext={() => setStep(2)}
-              // METHANATA THAMA onBack EKA ADD KALE
               onBack={() => setView('dashboard')} 
             />
           )}

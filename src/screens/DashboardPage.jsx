@@ -14,15 +14,16 @@ import {
 } from 'react-native';
 import { 
   MapPin, Plus, Calendar, Clock, Route, Trash2, 
-  Play, AlertCircle, LogOut, Globe, 
-  Sun, Moon, Sunset, Plane, WifiOff, RefreshCw
+  Play, AlertCircle, Sun, Moon, Sunset, Plane, WifiOff, RefreshCw,
+
 } from 'lucide-react-native';
 
 import { getMyTrips, deleteTrip } from '../api/api';
 import { useLanguage } from '../context/LanguageContext';
 
-export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }) {
-  const { t, language, toggleLanguage } = useLanguage();
+
+export default function DashboardPage({ user, onNewTrip, onStartTrip, onNavigateToProfile }) {
+  const { t, language } = useLanguage();
   
   const getT = (key, defaultText) => {
     const text = t(key);
@@ -64,7 +65,6 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
       const data = await getMyTrips();
       setTrips(data.trips || []);
     } catch (err) {
-    
       const errorMsg = err?.message?.toLowerCase() || '';
       
       if (errorMsg.includes('network') || errorMsg.includes('failed to fetch')) {
@@ -77,7 +77,6 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
       setRefreshing(false);
     }
   };
-
 
   const onRefresh = () => {
     fetchTrips(true);
@@ -146,11 +145,17 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
         </View>
 
         <View style={styles.navRight}>
-          <TouchableOpacity onPress={toggleLanguage} style={styles.iconCircleBtn}>
-            <Globe size={18} color="#cbd5e1" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={onLogout} style={[styles.iconCircleBtn, { backgroundColor: 'rgba(239, 68, 68, 0.1)' }]}>
-            <LogOut size={18} color="#ef4444" />
+          {/* --- අලුත් Profile Avatar Button එක --- */}
+          <TouchableOpacity 
+             onPress={onNavigateToProfile} 
+             style={styles.profileAvatarBtn}
+             activeOpacity={0.8}
+          >
+            {user?.name ? (
+              <Text style={styles.avatarInitial}>{user.name.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <User size={18} color="#0ea5e9" />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -158,7 +163,6 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
       <ScrollView 
         contentContainerStyle={styles.scrollContent} 
         showsVerticalScrollIndicator={false}
-       
         refreshControl={
           <RefreshControl 
             refreshing={refreshing} 
@@ -191,7 +195,7 @@ export default function DashboardPage({ user, onNewTrip, onStartTrip, onLogout }
         {/* Loading State */}
         {loading && <ActivityIndicator size="large" color="#0ea5e9" style={{ marginTop: 50 }} />}
 
-        {/* --- Error State (Custom View with Retry Button) --- */}
+        {/* Error State */}
         {!loading && error && (
           <View style={styles.errorContainer}>
             <View style={styles.errorIconCircle}>
@@ -352,17 +356,25 @@ const styles = StyleSheet.create({
   navRight: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12, 
   },
-  iconCircleBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  
+  /* අලුත් Profile Avatar Button Styles */
+  profileAvatarBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(14, 165, 233, 0.15)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 8, 
+    borderWidth: 1,
+    borderColor: 'rgba(14, 165, 233, 0.4)',
   },
+  avatarInitial: {
+    color: '#0ea5e9',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+
   scrollContent: {
     padding: 16,
     paddingBottom: 40, 
@@ -410,8 +422,6 @@ const styles = StyleSheet.create({
     color: '#fff',
     lineHeight: 38,
   },
-
-
   errorContainer: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -456,8 +466,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 15,
   },
-
-  /* Empty State */
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -502,8 +510,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 15,
   },
-
-  /* Ticket Style Card */
   tripsGrid: {
     gap: 20,
   },
@@ -554,8 +560,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginLeft: 6,
   },
-
-  /* Dashed Divider */
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -587,8 +591,6 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     marginHorizontal: 16,
   },
-
-  /* Ticket Bottom */
   ticketBottom: {
     padding: 20,
     paddingTop: 16,
