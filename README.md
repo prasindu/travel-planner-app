@@ -41,7 +41,7 @@ Lanka Trails is a comprehensive travel planning application built with React Nat
 **1. Clone the repository:**
 
 ```bash
-git clone https://github.com/YourUsername/TravelPlannerApp.git
+git clone https://github.com/prasindu/TravelPlannerApp.git
 cd TravelPlannerApp
 ```
 
@@ -129,11 +129,15 @@ For each leg of the journey, the app provides **public transport options** inclu
 ### Step 5 — Start the Trip & Navigate
 Hit **"Start Journey"** to begin. As you travel, each upcoming destination is highlighted live on the **interactive map view** so you always know exactly where you're headed.
 
-### Step 6 — Smart Weather Rerouting
-The app continuously monitors weather conditions at your upcoming stops. If **rain, thunderstorms, or severe weather** is detected:
+### Step 6 — Smart Weather Rerouting & Alerts
+The app monitors weather conditions. If severe weather is detected, you receive an Instant Push Notification and indoor alternatives are suggested.
 - You'll receive an **instant alert**
 - The app suggests **alternative nearby destinations** that are suitable for the current conditions
 - You can accept a suggested alternative or dismiss the alert and continue your original plan
+
+### Step 7 — Stay Notified
+Never miss a trip with automated push notifications reminding you 30 minutes before your journey begins!
+
 
 ---
 
