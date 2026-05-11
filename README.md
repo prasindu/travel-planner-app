@@ -12,7 +12,7 @@ Lanka Trails is a comprehensive travel planning application built with React Nat
 - **Intelligent Rerouting (Weather Alerts):** If bad weather (rain, thunderstorm, etc.) is detected at a planned stop, the app automatically alerts the user and suggests nearby indoor alternatives.
 - **Journey Timeline:** A visually appealing list view to track your past, current, and upcoming destinations.
 - **Dual View Mode:** Easily switch between the Map View (for geographical context) and the List View (for timeline tracking).
-
+- **🔔 Push Notifications & Reminders:** Get timely reminders 30 minutes before your trip starts and receive instant push notifications for severe weather alerts using @notifee/react-native.
 ---
 
 ## 🚀 Technologies Used
